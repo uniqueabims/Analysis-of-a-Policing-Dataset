@@ -1,0 +1,618 @@
+---
+title: MA304 Assessment (Analysis of a policing dataset from Dallas, Texas in 2016)
+author: "Catherine Adodo"
+Student Id: "2200970"
+date: "2023-04-10"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning=FALSE)
+options(repos = c(CRAN = "https://cloud.r-project.org/"))
+
+#Install required libraries
+install.packages("tidyverse")
+install.packages("ggplot2")
+install.packages("SmartEDA")
+install.packages("plotly")
+install.packages("ggthemes")
+install.packages("dplyr")
+install.packages("corrplot")
+install.packages("ggcorrplot")
+install.packages("gridExtra")
+install.packages("flexdashboard")
+install.packages("shiny")
+
+
+#Load required libraries
+library(flexdashboard)
+library(tidyverse)
+library(dplyr)
+library(SmartEDA)
+library(plotly)
+library(ggplot2)
+library(GGally)
+library(leaflet)
+library(ggthemes)
+library(corrplot)
+library(ggcorrplot)
+library(gridExtra)
+library(grid)
+library(shiny)
+theme_set(theme_classic())
+```
+
+# Abstract
+This study presents a comprehensive analysis of the 2016 Dallas, Texas policing dataset, focusing on use of force incidents. The analysis explores various aspects of these incidents, including correlations between variables, disparities among officers and subjects of different racial backgrounds and genders, geographical distribution, and potential relationships between officer race, years on force, and incident reason. The findings provide valuable insights into the factors influencing use of force incidents and highlight the need for further research and targeted interventions to address disparities and improve community relations.
+
+# Introduction
+The use of force by police officers has been a topic of significant concern and debate in recent years, particularly as it pertains to racial and gender disparities. Understanding the factors that influence the occurrence of use of force incidents is crucial for developing targeted interventions and policies aimed at reducing these incidents and improving community relations. In this study, we present a comprehensive analysis of the 2016 Dallas, Texas policing dataset to explore various aspects of use of force incidents, including correlations between variables, racial and gender disparities among officers and subjects, geographical distribution, and potential relationships between officer race, years on force, and incident reason.
+
+# Overview of the Dataset and Description
+The dataset provides extensive information on police incidents, demographics, and law enforcement activities in Dallas during the year 2016.It consists of 2384 observations and 47 variables.It allows for a comprehensive analysis of various aspects of policing in Dallas, including the distribution of incidents across demographic groups and neighborhoods, the types and frequency of incidents, officer response times, and community engagement efforts.
+
+```{r, results='hide'}
+#Import Dataset
+data <- read.csv("~/Downloads/37-00049_UOF-P_2016_prepped.csv")
+
+# View the structure of the dataset
+str(data)
+
+# Summary of the dataset
+summary(data)
+
+#Get the shape of the dataset
+dim(data)
+```
+
+# Data Preprocessing
+It can be observed that all columns are categorical variables which will be be converted to factors to make it easier for visualization purpose.There are also some columns which should be numerical and not character, this will be treated as well. The empty columns and the first row (which is the same name as the dataframe) will be deleted.
+```{r}
+#converting to numerical
+data$OFFICER_YEARS_ON_FORCE <- as.numeric(data$OFFICER_YEARS_ON_FORCE)
+data$STREET_NUMBER <- as.numeric(data$STREET_NUMBER)
+data$SECTOR <- as.numeric(data$SECTOR)
+data$OFFICER_ID <- as.numeric(data$OFFICER_ID)
+data$SUBJECT_ID <- as.numeric(data$SUBJECT_ID)
+data$REPORTING_AREA <- as.numeric(data$REPORTING_AREA)
+data$BEAT <- as.numeric(data$BEAT)
+data$LOCATION_LATITUDE <- as.numeric(data$LOCATION_LATITUDE)
+data$LOCATION_LONGITUDE <- as.numeric(data$LOCATION_LONGITUDE)
+
+# Convert INCIDENT_DATE to Date format
+data$INCIDENT_DATE <- as.Date(data$INCIDENT_DATE, format = "%m/%d/%y")
+
+# convert all characters to factors
+char_cols <- sapply(data, is.character)
+data[char_cols] <- lapply(data[char_cols], as.factor)
+
+# Delete the first row
+data <- data[-1, ]
+
+# Delete empty columns
+data <- data[, -c(37,38,39,40,41,42,43,44,45)]
+```
+
+# Exploratory data analysis (EDA)
+EDA will be conducted in this R Markdown using a combination of R code, plots, and descriptive text to create a comprehensive visualizations to explore trends and patterns in the data and produce interactive report.
+
+### Correlation Analysis
+
+The p-value matrix shows a statistically significant correlation between REPORTING_AREA and BEAT, but not between OFFICER_ID and SUBJECT_ID or LOCATION_LATITUDE and LOCATION_LONGITUDE. 
+
+The correlation matrix reveals a strong negative correlation between OFFICER_ID and OFFICER_YEARS_ON_FORCE and a moderate positive correlation between REPORTING_AREA and BEAT. Other correlations include SECTOR and BEAT with a very strong positive correlation, suggesting redundancy in the data, and STREET_NUMBER and LOCATION_LATITUDE with a moderate positive correlation.
+
+```{r}
+# Select only numeric columns
+numeric_columns <- data %>%
+  select_if(is.numeric)
+
+# Compute the correlation matrix
+correlation_matrix <- cor(numeric_columns, use = "complete.obs")
+
+# Calculate the p-value matrix
+p_value_matrix <- cor_pmat(numeric_columns)
+
+# Create ggcorrplot with p-values and hierarchical clustering order
+G1 <- ggcorrplot(correlation_matrix, p.mat = p_value_matrix, hc.order = TRUE, type = "lower")
+
+# Add title to ggcorrplot
+G1 <- G1 + ggtitle("Correlation Matrix with P-values")
+
+# Display ggcorrplot
+G1
+
+# Create corrplot with circle method, p-values, significance level, and blank insignificance
+G2 <- corrplot(correlation_matrix, method = "circle", p.mat = p_value_matrix, sig.level = 0.05, insig = "blank")
+```
+
+### Officer and Subject Demographics
+
+**Two-way table of officer race and subject race:** The table reveals that most incidents involve White officers and Black subjects (846 incidents), suggesting a higher number of interactions between these groups. Black officers also have more incidents with Black subjects (201 incidents). Hispanic officers primarily interact with Black (230 incidents) and Hispanic subjects (138 incidents). Asian officers have fewer incidents overall, mainly with Black (28 incidents) and White subjects (17 incidents). No incidents involve officers with unspecified race, which could be due to data limitations. Officers of other races have more interactions with Black subjects (21 incidents) than with other subject races.
+
+```{r}
+# Two-way table of officer race and subject race
+two_way_table <- table(data$OFFICER_RACE, data$SUBJECT_RACE)
+print(two_way_table)
+```
+
+**Use of Force Incidents by Officer Race:** There are noticeable differences in the number of use of force incidents among police officers of various racial backgrounds. White officers have the highest number of incidents, followed by Hispanic, and Black or African American officers.This disparity could be due to various factors, including demographics of the police force, community demographics, or implicit biases.Asian, American Indian and other officers have significantly lower use of force incidents compared to the other racial groups.
+This could be due to their relatively lower representation in the police force or differences in policing styles and practices.
+```{r}
+#Count of use of force incidents by officer race
+data %>%
+  ggplot(aes(x = OFFICER_RACE, fill = OFFICER_RACE)) +
+  geom_bar() +
+  scale_fill_brewer(palette = "Set2") +
+  theme_fivethirtyeight() +
+  theme(
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),
+    axis.title = element_text(size = 14, face = "bold"),
+    axis.text = element_text(size = 12),
+    legend.position = "none"
+  ) +
+  labs(
+    title = "Use of Force Incidents by Officer Race",
+    x = "Officer Race",
+    y = "Count"
+  )
+```
+
+
+**Use of Force Incidents by Subject Race:** There are apparent differences in the number of use of force incidents involving subjects of various racial backgrounds.
+Black or African American subjects have the highest number of incidents, followed by Hispanic and White subjects.
+Asian, American Indian and other subjects have significantly lower use of force incidents compared to the other racial groups. This could be due to their relatively lower representation in the overall population or other factors that require further investigation.
+```{r}
+#Count of use of force incidents by subject race
+data %>%
+  ggplot(aes(x = SUBJECT_RACE, fill = SUBJECT_RACE)) +
+  geom_bar() +
+  scale_fill_brewer(palette = "Set3") +
+  theme_fivethirtyeight() +
+  theme(
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),
+    axis.title = element_text(size = 14, face = "bold"),
+    axis.text = element_text(size = 12),
+    legend.position = "none"
+  ) +
+  labs(
+    title = "Use of Force Incidents by Subject Race",
+    x = "Subject Race",
+    y = "Count"
+  )
+
+```
+
+**Use of Force Incidents by Officer Gender:** It is evident that male officers have a significantly higher number of use of force incidents than female officers. This suggests that male officers are more likely to use force in their interactions with the public.
+
+```{r}
+#Count of use of force incidents by officer gender
+data %>%
+  ggplot(aes(x = OFFICER_GENDER, fill = OFFICER_GENDER)) +
+  geom_bar() +
+  scale_fill_brewer(palette = "Set2") +
+  theme_fivethirtyeight() +
+  theme(
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),
+    axis.title = element_text(size = 14, face = "bold"),
+    axis.text = element_text(size = 12),
+    legend.position = "none"
+  ) +
+  labs(
+    title = "Use of Force Incidents by Officer Gender",
+    x = "Officer Gender",
+    y = "Count"
+  )
+
+```
+
+**Use of Force Incidents by Subject Gender:** It is evident that male subjects have a significantly higher number of use of force incidents than female subjects. This suggests that male subjects are more likely to be involved in use of force incidents in their interactions with the police.
+
+```{r}
+#Count of use of force incidents by subject gender
+data %>%
+  ggplot(aes(x = SUBJECT_GENDER, fill = SUBJECT_GENDER)) +
+  geom_bar() +
+  scale_fill_brewer(palette = "Set2") +
+  theme_fivethirtyeight() +
+  theme(
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),
+    axis.title = element_text(size = 14, face = "bold"),
+    axis.text = element_text(size = 12),
+    legend.position = "none"
+  ) +
+  labs(
+    title = "Use of Force Incidents by Subject Gender",
+    x = "Subject Gender",
+    y = "Count"
+  )
+
+```
+
+### Geographical View
+
+**Geographical Distribution of Use of Force Incidents:** Based on the map, it is evident that use of force incidents are concentrated in specific areas, particularly urban centers. This suggests that there might be a correlation between population density and use of force incidents.It provides valuable insights into the geographical distribution of use of force incidents in the given dataset.
+The map highlights the need for further research and analysis on the factors contributing to the concentration of incidents in specific areas and can help develop targeted interventions to reduce the use of force and improve community relations in those areas.
+
+```{r, warning=FALSE}
+#Geographical distribution of use of force incidents (using latitude and longitude)
+data %>%
+  ggplot(aes(x = LOCATION_LONGITUDE, y = LOCATION_LATITUDE)) +
+  geom_point() +
+  theme_minimal() +
+  labs(title = "Geographical Distribution of Use of Force Incidents",
+       x = "Longitude",
+       y = "Latitude")
+
+```
+
+**Geolocated Data Points Visualization with Leaflet:** Use of force incidents are concentrated in specific areas, particularly urban centers especially WestEnd, Akard and Downtown having more concentrated blue dots. The map provides a detailed and interactive view of the data, allowing to zoom and see locations for a better understanding of the distribution and characteristics of use of force incidents in the given dataset.
+
+```{r}
+# Filter out rows with missing latitude and longitude
+map_data <- data %>%
+  filter(!is.na(LOCATION_LATITUDE) & !is.na(LOCATION_LONGITUDE))
+
+# Convert latitude and longitude to numeric
+map_data$LOCATION_LATITUDE <- as.numeric(map_data$LOCATION_LATITUDE)
+map_data$LOCATION_LONGITUDE <- as.numeric(map_data$LOCATION_LONGITUDE)
+
+# Create a Leaflet map
+leaflet(map_data) %>%
+  addTiles() %>%
+  addCircleMarkers(lng = ~LOCATION_LONGITUDE, lat = ~LOCATION_LATITUDE,
+                   radius = 2, stroke = FALSE, fillOpacity = 0.5) %>%
+  addControl(html = "<div style='background-color: rgba(255, 255, 255, 0.8); padding: 5px;'><strong>Geolocated Data Points Visualization with Leaflet</strong></div>", position = "topright")
+```
+
+
+**Distribution of Officer Race Across Divisions:** White officers are the majority in all divisions, with Hispanic officers being the second most common, except in South Central, where Black officers are more numerous. Black, Asian, and other races have smaller representation across divisions. Central division has the highest total number of officers, while NorthWest has the lowest.
+
+**Distribution of Subject Race Across Divisions:** Black subjects are the majority in most divisions, followed by Hispanic subjects. White, Asian, and other races have varying numbers across divisions. Central division has the highest total number of subjects, while NorthWest and South Central have the lowest. These observations provide insights into the racial composition of the police force and subjects involved in use of force incidents across divisions.
+
+```{r}
+# Combine subject race and officer race into a single data frame
+combined_data <- data %>%
+  gather(key = "Race_Type", value = "Race", SUBJECT_RACE, OFFICER_RACE)
+
+# Create the combined bar chart
+combined_bar_chart <- ggplot(combined_data, aes(x = DIVISION, y = ..count.., fill = Race)) +
+  geom_bar(position = "dodge", width = 0.7) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size  = 9,
+                                   angle = 45,
+                                   hjust = 1,
+                                   vjust = 1),
+        plot.title = element_text(size = 14, hjust = 0.5)) +
+  xlab("Division") +
+  ylab("Count") +
+  ggtitle("Distribution of Subject and Officer Race Across Divisions") +
+  guides(fill = guide_legend(title = "Race")) +
+  facet_wrap(~ Race_Type, ncol = 1, scales = "free_y")
+
+# Make the bar chart interactive
+interactive_combined_bar_chart <- ggplotly(combined_bar_chart)
+
+# Print the interactive combined bar chart
+interactive_combined_bar_chart
+```
+
+### Number of Incidents
+
+**Daily Number of Incidents:** The number of use of force incidents varies daily and the highest occurrence is in September 30th 2016 with 24 incidents, followed by February 14th 2016 with 23 incidents, and so on.There are noticeable spikes and dips in the number of incidents reported, with some days having a higher number of incidents than others.
+It is also evident that the number of incidents reported generally increases over time.
+```{r}
+# Time series plot for daily number of incidents
+p <- data %>%
+  group_by(INCIDENT_DATE) %>%
+  summarize(count = n()) %>%
+  ggplot(aes(x = INCIDENT_DATE, y = count)) +
+  geom_line(color = "steelblue", size = 0.6) +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b %Y") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+        axis.text.y = element_text(size = 10),
+        axis.title = element_text(size = 12, face = "bold"),
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5)) +
+  labs(title = "Daily Number of Incidents",
+       x = "Date",
+       y = "Number of Incidents")
+
+# Make the plot interactive
+interactive_plot <- ggplotly(p)
+
+# Display the interactive plot
+interactive_plot
+
+```
+
+**Daily Number of Incidents with Trend:** The overall trend in the data is an increasing number of use of force incidents reported over time. The trend line shows a curve trajectory, indicating that the number of incidents reported has been steadily increasing and decreasing over the time period.
+
+```{r}
+# Smoothing using geom_smooth()
+data %>%
+  group_by(INCIDENT_DATE) %>%
+  summarize(count = n()) %>%
+  ggplot(aes(x = INCIDENT_DATE, y = count)) +
+  geom_point() +
+  geom_smooth(method = "loess", span = 0.3) +
+  labs(title = "Daily Number of Incidents with Trend",
+       x = "Date",
+       y = "Number of Incidents")
+
+```
+
+### Injuries
+
+**Officer and Subject Injury:** Based on the observation from the pie charts, it appears that there is a notable difference in the distribution of the number of wounds between subjects and officers. Subjects seem to sustain a higher proportion of wounds (26.8%) compared to officers (9.8%). This might indicate that during the incidents, subjects are more likely to be injured than the officers involved.
+```{r}
+# Pie chart of Officer injury
+pie_data <- data.frame(table(data$OFFICER_INJURY))
+pie_data$Var1 <- as.factor(pie_data$Var1)
+
+# Calculate the percentages and add them to the data frame
+total_freq <- sum(pie_data$Freq)
+pie_data$Percentage <- round((pie_data$Freq / total_freq) * 100, 1)
+
+# Create the pie chart with percentage labels
+ggplot(pie_data, aes(x = "", y = Freq, fill = Var1)) +
+  geom_bar(width = 1, stat = "identity") +
+  coord_polar("y", start = 0) +
+  geom_text(aes(y = Freq / 2 + c(0, cumsum(Freq)[-length(Freq)]), label = paste0(Percentage, "%")), size = 4) +
+  theme_minimal() +
+  labs(title = "Officer Injury (Pie Chart)") +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks = element_blank(),
+        legend.title = element_blank())
+
+# Pie chart of subject injury
+pie_data <- data.frame(table(data$SUBJECT_INJURY))
+pie_data$Var1 <- as.factor(pie_data$Var1)
+
+# Calculate the percentages and add them to the data frame
+total_freq <- sum(pie_data$Freq)
+pie_data$Percentage <- round((pie_data$Freq / total_freq) * 100, 1)
+
+# Create the pie chart with percentage labels
+ggplot(pie_data, aes(x = "", y = Freq, fill = Var1)) +
+  geom_bar(width = 1, stat = "identity") +
+  coord_polar("y", start = 0) +
+  geom_text(aes(y = Freq / 2 + c(0, cumsum(Freq)[-length(Freq)]), label = paste0(Percentage, "%")), size = 4) +
+  theme_minimal() +
+  labs(title = "Subject Injury (Pie Chart)") +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks = element_blank(),
+        legend.title = element_blank())
+```
+**Comparison of Top Officer and Subject Injury Type:** Officers generally sustain fewer injuries than subjects. Most officers (2160 out of 2347) have no visible injuries, while for subjects, the number is 1622 out of 2002. The most common injury type for both groups is "Abrasion/Scrape." However, subjects experience a broader range of injury types, some unique to their encounters with officers. This data suggests that subjects face a higher risk of injury during use of force incidents, with more diverse injury types than officers.
+```{r}
+top_n <- 10 # Set the number of top injuries to display
+
+# Process officer injury data
+officer_injury_data <- data %>%
+  filter(!is.na(OFFICER_INJURY_TYPE)) %>%
+  group_by(OFFICER_INJURY_TYPE) %>%
+  summarize(count = n()) %>%
+  mutate(type = "Officer") %>%
+  rename(injury = OFFICER_INJURY_TYPE) %>%
+  top_n(n = top_n, wt = count)
+
+# Process subject injury data
+subject_injury_data <- data %>%
+  filter(!is.na(SUBJECT_INJURY_TYPE)) %>%
+  group_by(SUBJECT_INJURY_TYPE) %>%
+  summarize(count = n()) %>%
+  mutate(type = "Subject") %>%
+  rename(injury = SUBJECT_INJURY_TYPE) %>%
+  top_n(n = top_n, wt = count)
+
+# Combine officer and subject injury data
+injury_data <- rbind(officer_injury_data, subject_injury_data)
+
+# Create the bar chart
+bar_chart <- ggplot(injury_data, aes(x = injury, y = count, fill = type, color = type)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +
+  labs(title = "Comparison of Top Officer and Subject Injury Type",
+       x = "Injury",
+       y = "Count",
+       fill = "Type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Convert ggplot to plotly object
+interactive_bar_chart <- ggplotly(bar_chart)
+
+# Display the interactive bar chart
+interactive_bar_chart
+
+```
+
+
+### Relationship between Population, Officer Experience, Race, and Incident Reason
+
+**Interactive Dot Plot:** The dot plot reveals significant differences in the number of use of force incidents among police officers from various racial backgrounds. White officers account for the highest number of incidents, followed by Hispanic and Black or African American officers. Such disparities might result from a range of factors, such as the demographic composition of the police force, local community demographics, or unconscious biases. In comparison, Asian, American Indian, and other officers have considerably fewer use of force incidents. This observation could stem from their relatively lower presence in the police force or variations in policing approaches and methods as demonstrated in the dot plot.
+```{r}
+# Dot plot of use of force incidents by officer race with enhanced aesthetics and gridlines
+p <- ggplot(data, aes(x = OFFICER_RACE , y = after_stat(count), group = OFFICER_RACE, color = OFFICER_RACE)) +
+  geom_point(stat = "count", size = 3, alpha = 0.8) +
+  scale_color_brewer(palette = "Set1") +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 12),
+    axis.title = element_text(size = 14, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    panel.grid.major = element_line(color = "grey90"),
+    panel.grid.minor = element_blank()
+  ) +
+  labs(
+    title = "Interactive Dot Plot",
+    x = "Officer Race",
+    y = "Count"
+  )
+
+# Make the plot interactive
+interactive_plot <- ggplotly(p)
+
+# Display the interactive plot
+interactive_plot
+```
+
+
+**Histogram of Officer Years on Force:** The distribution of years on force is right-skewed: The histogram shows that the majority of officers in the dataset have served on the force for fewer than 10 years, with a smaller number of officers having served for longer periods. This is indicated by the peak of the histogram being located to the left of the center of the x-axis. Overall, the histogram provides a simple and intuitive way to visualize the distribution of years on force for police officers in the dataset. The right-skewed distribution suggests that there are more officers with fewer years of experience, which could have implications for the way that use of force incidents are handled by the police department.
+```{r}
+# Histogram of officer years on force with enhanced aesthetics
+ggplot(data, aes(x = OFFICER_YEARS_ON_FORCE)) +
+  geom_histogram(binwidth = 1, fill = "#56B4E9", color = "black", alpha = 0.8) +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 12),
+    axis.title = element_text(size = 14, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    panel.grid.major = element_line(color = "grey90"),
+    panel.grid.minor = element_blank()
+  ) +
+  labs(
+    title = "Histogram of Officer Years on Force",
+    x = "Years on Force",
+    y = "Frequency"
+  )
+```
+
+**Interactive Box Plot:** The key observations are;
+
+- American Indian Officers:
+A smaller range (4-27 years) and higher median (16 years) indicate a concentration around the mid-range of years on the force.
+
+- Asian Officers:
+Positively skewed distribution with the lowest median (3 years) and a range of 1-19 years, suggesting shorter career spans.
+
+- Black Officers:
+ Positively skewed distribution, median of 7 years, and range of 0-34 years, with an outlier exceeding the upper fence.
+
+- Hispanic Officers:
+Positively skewed distribution, median of 5.5 years, range of 0-34 years, and an outlier exceeding the upper fence.
+
+- Officers of Other Races:
+Narrowest range (1-10 years) with a median of 6 years, indicating shorter career spans.
+
+- White Officers:
+Positively skewed distribution, median of 6 years, range of 1-36 years, and an outlier exceeding the upper fence.
+
+In summary, Black, Hispanic, and White officers have outliers with longer career spans, while American Indian, Asian, and Other race officers have more uniform distributions within their respective ranges.
+
+```{r}
+# Box plot of officer years on force by officer race with enhanced aesthetics
+p <- ggplot(data, aes(x = OFFICER_RACE, y = OFFICER_YEARS_ON_FORCE, fill = OFFICER_RACE)) +
+  geom_boxplot(alpha = 0.8) +
+  scale_fill_brewer(palette = "Set3") +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 12),
+    axis.title = element_text(size = 14, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    panel.grid.major = element_line(color = "grey90"),
+    panel.grid.minor = element_blank()
+  ) +
+  labs(
+    title = "Interactive Box Plot",
+    x = "Officer Race",
+    y = "Years on Force"
+  )
+
+# Make the plot interactive
+interactive_plot <- ggplotly(p)
+
+# Display the interactive plot
+interactive_plot
+
+```
+
+**Interactive Violin Plot:** We can deduce the following information about police officers' race and their years of service on the force:
+
+- American Indian Officers:
+Density ranges from 0.028153 to 0.030293, suggesting a relatively uniform distribution of years on the force.The range of years on the force is 4 to 27.
+
+- Asian Officers: Density ranges from 0.085002 to 0.014795, indicating that there are more officers with fewer years on the force. The range of years on the force is 1 to 19.
+
+- Black Officers: Density ranges from 0.045791 to 0.001853, showing that there are more officers with fewer years on the force and a significant drop in density as years on the force increase. The range of years on the force is 0 to 34.
+
+- Hispanic Officers: Density ranges from 0.048823 to 0.000609, indicating a similar pattern to Black officers, with more officers having fewer years on the force and a significant drop in density as years on the force increase. The range of years on the force is 0 to 34.
+
+- Officers of Other Races:
+Density ranges from 0.051951 to 0.089427, suggesting a relatively uniform distribution of years on the force. The range of years on the force is 1 to 10.
+
+- White Officers:
+Density ranges from 0.077553 to 0.00845, showing that there are more officers with fewer years on the force and a significant drop in density as years on the force increase. The range of years on the force is 1 to 36.
+
+In summary, officers of Asian, Black, Hispanic, and White races tend to have more officers with fewer years on the force and a decreasing density as years on the force increase. American Indian and Other race officers show a relatively uniform distribution of years on the force. Additionally, the range of years on the force varies across different races, with White officers having the widest range (1-36 years) and Officers of Other Races having the narrowest range (1-10 years).
+```{r}
+# Violin plot of officer years on force by officer race
+p <- ggplot(data, aes(x = OFFICER_RACE, y = OFFICER_YEARS_ON_FORCE, fill = OFFICER_RACE)) +
+  geom_violin(alpha = 0.8) +
+  scale_fill_brewer(palette = "Set2") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),
+    axis.title.x = element_text(size = 14, face = "bold"),
+    axis.title.y = element_text(size = 14, face = "bold"),
+    axis.text.x = element_text(size = 12, angle = 45, hjust = 1),
+    axis.text.y = element_text(size = 12),
+    legend.position = "none"
+  ) +
+  labs(title = "Interactive Violin Plot",
+       x = "Officer Race",
+       y = "Years on Force")
+
+# Make the plot interactive
+interactive_plot <- ggplotly(p)
+
+# Display the interactive plot
+interactive_plot
+
+```
+
+
+**Scatter plot of Officer Years on Force vs. Incident Reason:** From the scatter plot below, there is clear relationship between officer race, years on force and incident reason: The scatter plot shows that there is a clear pattern or trend in the relationship between officer years on force, race and incident reason. White officers in yellow dots seems to overcrowd the graph especially white officers with lower years on force within 10 years.This suggests that the number of years that an officer has served on the force and race may be a strong predictor of the reason for a use of force incident.
+```{r}
+# Create a scatter plot using the policing dataset
+p <- ggplot(data, aes(x = INCIDENT_REASON, y = OFFICER_YEARS_ON_FORCE, color = OFFICER_RACE)) +
+  geom_jitter(width = 0.2, height = 0.3, alpha = 1.7) +
+  scale_color_brewer(palette = "Set1") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Scatter plot of Officer Years on Force vs. Incident Reason",
+       x = "Incident Reason",
+       y = "Officer Years on Force",
+       color = "Officer Race")
+
+# Make the plot interactive
+interactive_plot <- ggplotly(p)
+
+# Display the interactive plot
+interactive_plot
+```
+
+# Discussion of findings
+
+The comprehensive analysis of the 2016 Dallas, Texas policing dataset provided valuable insights into various aspects of use of force incidents. The correlation between reporting areas and beats highlights the importance of considering geographical factors when analyzing use of force incidents, as incidents in similar areas tend to be grouped together. Disparities in use of force incidents among officers and subjects of different racial backgrounds and genders raise questions about the potential influences of demographics, policing styles, and implicit biases. In particular, the data revealed that White officers had the most incidents with Black subjects, who also experienced the highest number of use of force incidents overall. Further research is required to understand the underlying factors driving these disparities and to develop targeted interventions.
+The concentration of incidents in urban centers suggests a relationship between population density and the occurrence of use of force incidents. This finding emphasizes the need for targeted interventions in specific areas to improve community relations and reduce use of force incidents. The higher likelihood of subjects sustaining injuries during use of force incidents compared to officers indicates that the nature of these incidents puts subjects at a higher risk of injury. This finding has important implications for policing practices and training.
+The distribution of years of service among officers in the dataset, particularly the right-skewed distribution and the disparities among officers of different racial backgrounds, could potentially impact the handling of use of force incidents. This observation warrants further investigation to understand its implications for policing practices. The varying representation of officer and subject races across divisions provides insights into the racial composition of the police force and the subjects involved in use of force incidents. This information can be useful for identifying areas requiring targeted interventions or policy changes.
+The scatter plot analysis suggests a potential relationship between officer race, years on force, and incident reason, indicating that officer years of service and race could be strong predictors of the reason for a use of force incident. By understanding these relationships and their implications, targeted interventions and policy changes can be implemented to address the disparities observed in the data and ultimately create a safer and more inclusive community.
+
+
+# Conclusion
+
+The comprehensive analysis of the 2016 Dallas, Texas policing dataset provided valuable insights into various aspects of use of force incidents. The findings emphasize the importance of considering geographical factors and the disparities among officers and subjects of different racial backgrounds and genders when analyzing use of force incidents. Further research is required to understand the underlying factors driving these disparities and to develop targeted interventions to address them. By understanding these relationships and their implications, targeted interventions and policy changes can be implemented to create a safer and more inclusive community. The study highlights the need for continuous monitoring and analysis of use of force incidents to ensure that policing practices evolve in response to changing societal needs and expectations.
